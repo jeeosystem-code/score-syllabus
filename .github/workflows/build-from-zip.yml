@@ -1,0 +1,34 @@
+name: Build APK from zip
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch: {}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find and unzip the project
+        run: |
+          set -e
+          mkdir -p _proj
+          for z in *.zip; do
+            if unzip -l "$z" | grep -q "com/score1/syllabus/ScoreWidget.kt"; then
+              echo "Using $z"; unzip -oq "$z" -d _proj; break
+            fi
+          done
+          S=$(find _proj -name settings.gradle.kts | head -n1)
+          test -n "$S" || { echo "No Score1Syllabus zip found in the repo root"; exit 1; }
+          echo "PROJ=$(dirname "$S")" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: 17}
+      - run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses >/dev/null || true
+      - uses: gradle/actions/setup-gradle@v4
+        with: {gradle-version: "8.9"}
+      - name: Build debug APK
+        run: gradle assembleDebug --no-daemon
+        working-directory: ${{ env.PROJ }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Score1-Syllabus-APK
+          path: ${{ env.PROJ }}/app/build/outputs/apk/debug/app-debug.apk
